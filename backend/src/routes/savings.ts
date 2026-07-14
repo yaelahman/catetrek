@@ -5,6 +5,7 @@ import { ok, fail } from "../utils/response";
 import { requireAuth, requireBusiness, requireRoles } from "../middleware/auth";
 import { emitBusiness } from "../socket";
 import { logActivity } from "../utils/activity";
+import { money } from "../utils/money";
 
 const router = Router();
 router.use(requireAuth, requireBusiness);
@@ -25,12 +26,31 @@ async function ensureSavingsCategory(businessId: string, type: "INCOME" | "EXPEN
   });
 }
 
-function withProgress<T extends { targetAmount: unknown; currentAmount: unknown; status: string }>(goal: T) {
-  const targetAmount = Number(goal.targetAmount);
-  const currentAmount = Number(goal.currentAmount);
+function serializeContribution<T extends { amount: unknown }>(c: T) {
+  return { ...c, amount: money(c.amount) };
+}
+
+function withProgress<
+  T extends {
+    targetAmount: unknown;
+    currentAmount: unknown;
+    status: string;
+    contributions?: Array<{ amount: unknown }>;
+  },
+>(goal: T) {
+  const targetAmount = money(goal.targetAmount);
+  const currentAmount = money(goal.currentAmount);
   const percent = targetAmount > 0 ? Math.min(100, (currentAmount / targetAmount) * 100) : 0;
-  const remaining = Math.max(0, targetAmount - currentAmount);
-  return { ...goal, targetAmount, currentAmount, percent, remaining };
+  const remaining = Math.max(0, money(targetAmount - currentAmount));
+  const contributions = goal.contributions?.map(serializeContribution);
+  return {
+    ...goal,
+    targetAmount,
+    currentAmount,
+    percent,
+    remaining,
+    ...(contributions ? { contributions } : {}),
+  };
 }
 
 router.get("/", async (req, res) => {
@@ -72,26 +92,27 @@ router.post("/", requireRoles("OWNER", "ADMIN", "STAFF"), async (req, res) => {
   try {
     const schema = z.object({
       name: z.string().min(2),
-      targetAmount: z.number().positive(),
-      currentAmount: z.number().min(0).optional(),
+      targetAmount: z.coerce.number().positive(),
+      currentAmount: z.coerce.number().min(0).optional(),
       deadline: z.string().nullable().optional(),
       color: z.string().optional(),
       category: z.enum(["PURCHASE", "TRAVEL", "EMERGENCY", "EDUCATION", "OTHER"]).default("OTHER"),
       note: z.string().optional(),
     });
     const body = schema.parse(req.body);
-    const currentAmount = body.currentAmount || 0;
+    const targetAmount = money(body.targetAmount);
+    const currentAmount = money(body.currentAmount || 0);
 
     const goal = await prisma.savingsGoal.create({
       data: {
         name: body.name,
-        targetAmount: body.targetAmount,
+        targetAmount,
         currentAmount,
         deadline: body.deadline ? new Date(body.deadline) : null,
         color: body.color,
         category: body.category,
         note: body.note,
-        status: currentAmount >= body.targetAmount ? "COMPLETED" : "ACTIVE",
+        status: currentAmount >= targetAmount ? "COMPLETED" : "ACTIVE",
         businessId: req.businessId!,
       },
       include: { contributions: true, _count: { select: { contributions: true } } },
@@ -110,7 +131,8 @@ router.patch("/:id", requireRoles("OWNER", "ADMIN", "STAFF"), async (req, res) =
   try {
     const schema = z.object({
       name: z.string().min(2).optional(),
-      targetAmount: z.number().positive().optional(),
+      targetAmount: z.coerce.number().positive().optional(),
+      currentAmount: z.coerce.number().min(0).optional(),
       deadline: z.string().nullable().optional(),
       color: z.string().optional(),
       category: z.enum(["PURCHASE", "TRAVEL", "EMERGENCY", "EDUCATION", "OTHER"]).optional(),
@@ -124,18 +146,22 @@ router.patch("/:id", requireRoles("OWNER", "ADMIN", "STAFF"), async (req, res) =
     });
     if (!existing) return fail(res, "Target tabungan tidak ditemukan", 404);
 
-    const targetAmount = body.targetAmount ?? existing.targetAmount;
+    const currentAmount = money(body.currentAmount ?? existing.currentAmount);
+    const targetAmount = money(body.targetAmount ?? existing.targetAmount);
+
     let status = body.status ?? existing.status;
-    if (!body.status && existing.currentAmount >= targetAmount) status = "COMPLETED";
-    if (!body.status && existing.currentAmount < targetAmount && existing.status === "COMPLETED") {
-      status = "ACTIVE";
+    // Auto adjust only when status not explicitly set
+    if (body.status === undefined) {
+      if (currentAmount >= targetAmount) status = "COMPLETED";
+      else if (existing.status === "COMPLETED") status = "ACTIVE";
     }
 
     const goal = await prisma.savingsGoal.update({
       where: { id: existing.id },
       data: {
         name: body.name,
-        targetAmount,
+        targetAmount: body.targetAmount !== undefined ? targetAmount : undefined,
+        currentAmount: body.currentAmount !== undefined ? currentAmount : undefined,
         color: body.color,
         category: body.category,
         note: body.note,
@@ -148,6 +174,7 @@ router.patch("/:id", requireRoles("OWNER", "ADMIN", "STAFF"), async (req, res) =
       },
     });
 
+    await logActivity("SAVINGS_UPDATE", goal.name, req.user!.id, req.businessId);
     emitBusiness(req.businessId!, "savings:changed", { action: "update", goal: withProgress(goal) });
     return ok(res, withProgress(goal));
   } catch (err) {
@@ -159,7 +186,7 @@ router.patch("/:id", requireRoles("OWNER", "ADMIN", "STAFF"), async (req, res) =
 router.post("/:id/contribute", requireRoles("OWNER", "ADMIN", "STAFF"), async (req, res) => {
   try {
     const schema = z.object({
-      amount: z.number().positive(),
+      amount: z.coerce.number().positive(),
       type: z.enum(["DEPOSIT", "WITHDRAW"]).default("DEPOSIT"),
       accountId: z.string().optional(),
       date: z.string().optional(),
@@ -167,6 +194,7 @@ router.post("/:id/contribute", requireRoles("OWNER", "ADMIN", "STAFF"), async (r
       linkTransaction: z.boolean().default(true),
     });
     const body = schema.parse(req.body);
+    const amount = money(body.amount);
 
     const goal = await prisma.savingsGoal.findFirst({
       where: { id: String(req.params.id), businessId: req.businessId },
@@ -174,21 +202,25 @@ router.post("/:id/contribute", requireRoles("OWNER", "ADMIN", "STAFF"), async (r
     if (!goal) return fail(res, "Target tabungan tidak ditemukan", 404);
     if (goal.status === "CANCELLED") return fail(res, "Target sudah dibatalkan", 400);
 
-    if (body.type === "WITHDRAW" && body.amount > goal.currentAmount) {
+    const currentAmount = money(goal.currentAmount);
+    const targetAmount = money(goal.targetAmount);
+
+    if (body.type === "WITHDRAW" && amount > currentAmount) {
       return fail(res, "Jumlah tarik melebihi saldo tabungan target", 400);
     }
 
-    const signedAmount = body.type === "DEPOSIT" ? body.amount : -body.amount;
+    const signedAmount = body.type === "DEPOSIT" ? amount : money(-amount);
     const date = body.date ? new Date(body.date) : new Date();
     let transactionId: string | null = null;
 
+    // Tersambung transaksi kas: setor = EXPENSE dari akun, tarik = INCOME ke akun
     if (body.linkTransaction && body.accountId) {
       if (body.type === "DEPOSIT") {
         const category = await ensureSavingsCategory(req.businessId!, "EXPENSE", "Tabungan Target");
         const tx = await prisma.transaction.create({
           data: {
             type: "EXPENSE",
-            amount: body.amount,
+            amount,
             date,
             note: body.note || `Setor tabungan: ${goal.name}`,
             businessId: req.businessId!,
@@ -198,13 +230,16 @@ router.post("/:id/contribute", requireRoles("OWNER", "ADMIN", "STAFF"), async (r
           },
         });
         transactionId = tx.id;
-        emitBusiness(req.businessId!, "transaction:changed", { action: "create", transaction: tx });
+        emitBusiness(req.businessId!, "transaction:changed", {
+          action: "create",
+          transaction: { ...tx, amount: money(tx.amount) },
+        });
       } else {
         const category = await ensureSavingsCategory(req.businessId!, "INCOME", "Tarik Tabungan");
         const tx = await prisma.transaction.create({
           data: {
             type: "INCOME",
-            amount: body.amount,
+            amount,
             date,
             note: body.note || `Tarik tabungan: ${goal.name}`,
             businessId: req.businessId!,
@@ -214,12 +249,15 @@ router.post("/:id/contribute", requireRoles("OWNER", "ADMIN", "STAFF"), async (r
           },
         });
         transactionId = tx.id;
-        emitBusiness(req.businessId!, "transaction:changed", { action: "create", transaction: tx });
+        emitBusiness(req.businessId!, "transaction:changed", {
+          action: "create",
+          transaction: { ...tx, amount: money(tx.amount) },
+        });
       }
     }
 
-    const newCurrent = goal.currentAmount + signedAmount;
-    const status = newCurrent >= goal.targetAmount ? "COMPLETED" : "ACTIVE";
+    const newCurrent = money(currentAmount + signedAmount);
+    const status = newCurrent >= targetAmount ? "COMPLETED" : "ACTIVE";
 
     const [contribution, updated] = await prisma.$transaction([
       prisma.savingsContribution.create({
@@ -246,7 +284,7 @@ router.post("/:id/contribute", requireRoles("OWNER", "ADMIN", "STAFF"), async (r
 
     await logActivity(
       body.type === "DEPOSIT" ? "SAVINGS_DEPOSIT" : "SAVINGS_WITHDRAW",
-      `${goal.name}: ${body.amount}`,
+      `${goal.name}: ${amount}`,
       req.user!.id,
       req.businessId
     );
@@ -255,11 +293,11 @@ router.post("/:id/contribute", requireRoles("OWNER", "ADMIN", "STAFF"), async (r
     emitBusiness(req.businessId!, "savings:changed", {
       action: "contribute",
       goal: result,
-      contribution,
+      contribution: serializeContribution(contribution),
     });
     emitBusiness(req.businessId!, "account:changed", { action: "balance" });
 
-    return ok(res, { goal: result, contribution }, 201);
+    return ok(res, { goal: result, contribution: serializeContribution(contribution) }, 201);
   } catch (err) {
     if (err instanceof z.ZodError) return fail(res, "Validasi gagal", 400, err.issues);
     console.error(err);

@@ -44,3 +44,11 @@ export/
 
 # Optional lock files
 *.tsbuildinfo
+# PWA generated service workers
+frontend/public/sw.js
+frontend/public/sw.js.map
+frontend/public/workbox-*.js
+frontend/public/workbox-*.js.map
+frontend/public/swe-worker-*.js
+frontend/public/swe-worker-*.js.map
+frontend/public/fallback-*.js

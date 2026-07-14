@@ -1,11 +1,11 @@
 "use client";
 
 import { FormEvent, useCallback, useState } from "react";
-import { Hash, Palette, Plus, Tags, Wallet } from "lucide-react";
+import { Hash, Palette, Pencil, Plus, Power, Tags, Wallet } from "lucide-react";
 import { Protected } from "@/components/Protected";
-import { Button, Card, EmptyState, Input, Modal, PageHeader, Select } from "@/components/ui";
+import { Button, Card, EmptyState, Input, Modal, MoneyInput, PageHeader, Select } from "@/components/ui";
 import { api } from "@/lib/api";
-import { formatIDR } from "@/lib/format";
+import { formatIDR, parseIDR } from "@/lib/format";
 import { useRealtimeRefresh } from "@/lib/socket";
 
 type Account = {
@@ -71,7 +71,7 @@ export default function AccountsPage() {
     try {
       const body = {
         ...form,
-        openingBalance: Number(form.openingBalance || 0),
+        openingBalance: parseIDR(form.openingBalance),
       };
       if (editingId) {
         await api(`/api/accounts/${editingId}`, { method: "PATCH", body: JSON.stringify(body) });
@@ -124,10 +124,10 @@ export default function AccountsPage() {
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <Button variant="ghost" onClick={() => openEdit(a)}>
-                    Edit
+                    <Pencil size={14} /> Edit
                   </Button>
                   <Button variant="ghost" onClick={() => toggle(a)}>
-                    {a.isActive ? "Nonaktifkan" : "Aktifkan"}
+                    <Power size={14} /> {a.isActive ? "Nonaktifkan" : "Aktifkan"}
                   </Button>
                 </div>
               </div>
@@ -161,12 +161,11 @@ export default function AccountsPage() {
             <option value="CREDIT">Kartu Kredit</option>
             <option value="OTHER">Lainnya</option>
           </Select>
-          <Input
+          <MoneyInput
             label="Saldo awal"
-            type="number"
             icon={<Hash size={16} />}
             value={form.openingBalance}
-            onChange={(e) => setForm({ ...form, openingBalance: e.target.value })}
+            onValueChange={(raw) => setForm({ ...form, openingBalance: raw })}
           />
           <Input
             label="Warna aksen"

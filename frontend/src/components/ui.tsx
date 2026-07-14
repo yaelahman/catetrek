@@ -14,8 +14,8 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Eye, EyeOff, Paperclip, X } from "lucide-react";
-import { cn } from "@/lib/format";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, Paperclip, X } from "lucide-react";
+import { cn, formatIDRMask } from "@/lib/format";
 
 export function Card({
   children,
@@ -168,6 +168,77 @@ export const Input = forwardRef<
   );
 });
 
+/** Amount field with live IDR masking (1.500.000). Value stays as digit string. */
+export function MoneyInput({
+  label,
+  value,
+  onValueChange,
+  icon,
+  hint,
+  error,
+  className,
+  required,
+  disabled,
+  allowZero = true,
+  name,
+}: FieldBaseProps & {
+  value: string | number;
+  onValueChange: (rawDigits: string) => void;
+  required?: boolean;
+  disabled?: boolean;
+  allowZero?: boolean;
+  name?: string;
+}) {
+  const id = useId();
+  const display = formatIDRMask(value);
+  const filled = display.length > 0;
+
+  return (
+    <div className={cn("animate-fade-up", className)}>
+      <div
+        className={cn(
+          "field-shell",
+          !icon && "no-icon",
+          filled && "has-value",
+          error && "has-error"
+        )}
+      >
+        {icon && <span className="field-icon">{icon}</span>}
+        <div className="field-body">
+          <label htmlFor={id} className="field-label">
+            {label}
+          </label>
+          <div className="flex items-center gap-1.5 field-money-row">
+            <span className="field-money-prefix" aria-hidden>
+              Rp
+            </span>
+            <input
+              id={id}
+              name={name}
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              required={required}
+              disabled={disabled}
+              className="field-control"
+              value={display}
+              placeholder=" "
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^\d]/g, "");
+                if (!allowZero && raw.replace(/^0+/, "") === "" && raw.length > 0) {
+                  onValueChange("");
+                  return;
+                }
+                onValueChange(raw.slice(0, 15));
+              }}
+            />
+          </div>
+        </div>
+      </div>
+      {error ? <p className="field-error">{error}</p> : hint ? <p className="field-hint">{hint}</p> : null}
+    </div>
+  );
+}
 export const Select = forwardRef<
   HTMLButtonElement,
   Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "onChange" | "size"> &
@@ -597,5 +668,140 @@ export function Badge({
     <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-semibold", map[tone])}>
       {children}
     </span>
+  );
+}
+
+/** Wrapper tabel: scroll horizontal di mobile tanpa memotong konten. */
+export function TableShell({
+  children,
+  className,
+  minWidth = "44rem",
+}: {
+  children: ReactNode;
+  className?: string;
+  minWidth?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "animate-fade-up overflow-hidden rounded-[1.35rem] border border-[var(--line)] bg-white shadow-[var(--shadow-soft)] dark:bg-[var(--bg-elevated)]",
+        className
+      )}
+    >
+      <div
+        className="table-scroll overflow-x-auto overscroll-x-contain"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
+        <div style={{ minWidth }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Navigasi halaman yang enak di mobile. */
+export function PaginationBar({
+  page,
+  totalPages,
+  total,
+  onPageChange,
+  className,
+}: {
+  page: number;
+  totalPages: number;
+  total?: number;
+  onPageChange: (page: number) => void;
+  className?: string;
+}) {
+  const pages = Math.max(1, totalPages);
+  const current = Math.min(Math.max(1, page), pages);
+  const canPrev = current > 1;
+  const canNext = current < pages;
+
+  return (
+    <div
+      className={cn(
+        "mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+        className
+      )}
+    >
+      <p className="order-2 text-center text-sm text-[var(--muted)] sm:order-1 sm:text-left">
+        Halaman <span className="font-semibold text-[var(--ink)]">{current}</span> dari{" "}
+        <span className="font-semibold text-[var(--ink)]">{pages}</span>
+        {typeof total === "number" ? (
+          <>
+            {" "}
+            · <span className="font-semibold text-[var(--ink)]">{total}</span> data
+          </>
+        ) : null}
+      </p>
+
+      <div className="order-1 flex items-center justify-center gap-2 sm:order-2 sm:justify-end">
+        <button
+          type="button"
+          disabled={!canPrev}
+          onClick={() => onPageChange(current - 1)}
+          aria-label="Halaman sebelumnya"
+          className={cn(
+            "inline-flex h-10 min-w-[6.5rem] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--ink)] transition",
+            "hover:border-[var(--brand)]/35 hover:bg-[var(--brand-soft)]/70 active:scale-[0.98]",
+            "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[var(--line)] disabled:hover:bg-[var(--bg-elevated)]"
+          )}
+        >
+          <ChevronLeft size={16} strokeWidth={2.25} />
+          Sebelum
+        </button>
+
+        <div className="hidden items-center gap-1 sm:flex">
+          {Array.from({ length: pages }, (_, i) => i + 1)
+            .filter((p) => {
+              if (pages <= 5) return true;
+              if (p === 1 || p === pages) return true;
+              return Math.abs(p - current) <= 1;
+            })
+            .reduce<number[]>((acc, p, idx, arr) => {
+              if (idx > 0 && p - arr[idx - 1]! > 1) acc.push(-1);
+              acc.push(p);
+              return acc;
+            }, [])
+            .map((p, idx) =>
+              p === -1 ? (
+                <span key={`e-${idx}`} className="px-1 text-[var(--muted)]">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => onPageChange(p)}
+                  aria-current={p === current ? "page" : undefined}
+                  className={cn(
+                    "grid h-10 w-10 place-items-center rounded-xl text-sm font-semibold transition",
+                    p === current
+                      ? "bg-[var(--brand)] text-white shadow-sm"
+                      : "border border-[var(--line)] text-[var(--ink)] hover:bg-[var(--brand-soft)]"
+                  )}
+                >
+                  {p}
+                </button>
+              )
+            )}
+        </div>
+
+        <button
+          type="button"
+          disabled={!canNext}
+          onClick={() => onPageChange(current + 1)}
+          aria-label="Halaman berikutnya"
+          className={cn(
+            "inline-flex h-10 min-w-[6.5rem] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--ink)] transition",
+            "hover:border-[var(--brand)]/35 hover:bg-[var(--brand-soft)]/70 active:scale-[0.98]",
+            "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[var(--line)] disabled:hover:bg-[var(--bg-elevated)]"
+          )}
+        >
+          Berikut
+          <ChevronRight size={16} strokeWidth={2.25} />
+        </button>
+      </div>
+    </div>
   );
 }

@@ -7,8 +7,10 @@ import {
   Hash,
   NotebookPen,
   Paperclip,
+  Pencil,
   Plus,
   Search,
+  Trash2,
   Wallet,
 } from "lucide-react";
 import { Protected } from "@/components/Protected";
@@ -19,13 +21,16 @@ import {
   FileAttach,
   Input,
   Modal,
+  MoneyInput,
   PageHeader,
+  PaginationBar,
   Select,
+  TableShell,
   TextArea,
 } from "@/components/ui";
 import { API_URL, api } from "@/lib/api";
 import { confirm, toast } from "@/lib/alert";
-import { formatDate, formatIDR } from "@/lib/format";
+import { formatDate, formatIDR, parseIDR } from "@/lib/format";
 import { useRealtimeRefresh, useSocket } from "@/lib/socket";
 import { usePathname } from "next/navigation";
 
@@ -306,12 +311,13 @@ export default function TransactionsPage() {
         />
       ) : (
         <>
-          <div className="animate-fade-up overflow-hidden rounded-[1.35rem] border border-[var(--line)] bg-white shadow-[var(--shadow-soft)] dark:bg-[var(--bg-elevated)]">
+          <TableShell minWidth="52rem">
             <table className="w-full text-left text-sm">
               <thead style={{ background: "var(--table-head)" }} className="text-[var(--muted)]">
                 <tr>
                   <th className="px-4 py-3.5 font-semibold">Tanggal</th>
                   <th className="px-4 py-3.5 font-semibold">Detail</th>
+                  <th className="px-4 py-3.5 font-semibold">Kategori</th>
                   <th className="px-4 py-3.5 font-semibold">Akun</th>
                   <th className="px-4 py-3.5 font-semibold text-right">Jumlah</th>
                   <th className="px-4 py-3.5 font-semibold"></th>
@@ -334,7 +340,6 @@ export default function TransactionsPage() {
                         >
                           {t.type}
                         </Badge>
-                        <span className="font-medium">{t.category?.name || "Transfer"}</span>
                         {t.attachmentUrl && (
                           <a
                             href={`${API_URL}${t.attachmentUrl}`}
@@ -348,45 +353,37 @@ export default function TransactionsPage() {
                       </div>
                       {t.note && <p className="mt-1 text-xs text-[var(--muted)]">{t.note}</p>}
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <span className="font-medium">{t.category?.name || (t.type === "TRANSFER" ? "Transfer" : "—")}</span>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
                       {t.type === "TRANSFER"
                         ? `${t.transferFrom?.name} → ${t.transferTo?.name}`
                         : t.account?.name}
                     </td>
-                    <td className="px-4 py-3.5 text-right font-semibold">{formatIDR(t.amount)}</td>
+                    <td className="px-4 py-3.5 text-right font-semibold whitespace-nowrap">
+                      {formatIDR(t.amount)}
+                    </td>
                     <td className="px-4 py-3.5 text-right whitespace-nowrap">
                       <Button variant="ghost" onClick={() => openEdit(t)}>
-                        Edit
+                        <Pencil size={14} /> Edit
                       </Button>
                       <Button variant="ghost" onClick={() => remove(t.id)}>
-                        Hapus
+                        <Trash2 size={14} /> Hapus
                       </Button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableShell>
 
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <Button
-              variant="ghost"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Prev
-            </Button>
-            <p className="text-sm text-[var(--muted)]">
-              Halaman {pagination.page} / {pagination.totalPages}
-            </p>
-            <Button
-              variant="ghost"
-              disabled={page >= pagination.totalPages}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </Button>
-          </div>
+          <PaginationBar
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            onPageChange={setPage}
+          />
         </>
       )}
 
@@ -402,14 +399,12 @@ export default function TransactionsPage() {
             <option value="EXPENSE">Pengeluaran</option>
             <option value="TRANSFER">Transfer</option>
           </Select>
-          <Input
-            label="Jumlah (Rp)"
-            type="number"
+          <MoneyInput
+            label="Jumlah"
             required
-            min={1}
             icon={<Hash size={16} />}
             value={form.amount}
-            onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            onValueChange={(raw) => setForm({ ...form, amount: raw })}
           />
           <Input
             label="Tanggal"

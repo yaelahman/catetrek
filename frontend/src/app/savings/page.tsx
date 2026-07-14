@@ -6,8 +6,10 @@ import {
   CheckCircle2,
   Hash,
   NotebookPen,
+  Pencil,
   Plus,
   Target,
+  Trash2,
   Wallet,
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -20,13 +22,14 @@ import {
   EmptyState,
   Input,
   Modal,
+  MoneyInput,
   PageHeader,
   Select,
   TextArea,
 } from "@/components/ui";
 import { api } from "@/lib/api";
 import { confirm, toast } from "@/lib/alert";
-import { formatDate, formatIDR } from "@/lib/format";
+import { formatDate, formatIDR, parseIDR } from "@/lib/format";
 import { useRealtimeRefresh } from "@/lib/socket";
 
 type Account = { id: string; name: string; isActive: boolean; balance?: number };
@@ -75,9 +78,16 @@ export default function SavingsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [filter, setFilter] = useState("ACTIVE");
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [contribOpen, setContribOpen] = useState(false);
   const [selected, setSelected] = useState<Goal | null>(null);
   const [form, setForm] = useState(emptyGoal);
+  const [editForm, setEditForm] = useState({
+    ...emptyGoal,
+    currentAmount: "",
+    status: "ACTIVE" as Goal["status"],
+  });
   const [contrib, setContrib] = useState({
     type: "DEPOSIT",
     amount: "",
@@ -113,7 +123,7 @@ export default function SavingsPage() {
         method: "POST",
         body: JSON.stringify({
           name: form.name,
-          targetAmount: Number(form.targetAmount),
+          targetAmount: parseIDR(form.targetAmount),
           deadline: form.deadline || null,
           category: form.category,
           color: form.color,
@@ -133,6 +143,11 @@ export default function SavingsPage() {
   async function contribute(e: FormEvent) {
     e.preventDefault();
     if (!selected) return;
+    const amount = parseIDR(contrib.amount);
+    if (amount <= 0) {
+      setError("Nominal tidak valid");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -140,7 +155,7 @@ export default function SavingsPage() {
         method: "POST",
         body: JSON.stringify({
           type: contrib.type,
-          amount: Number(contrib.amount),
+          amount,
           accountId: contrib.accountId || undefined,
           note: contrib.note || undefined,
           date: contrib.date,
@@ -155,6 +170,13 @@ export default function SavingsPage() {
         accountId: "",
         note: "",
         date: new Date().toISOString().slice(0, 10),
+      });
+      toast({
+        title: contrib.type === "DEPOSIT" ? "Setoran tercatat" : "Penarikan tercatat",
+        message: contrib.accountId
+          ? "Saldo target diperbarui dan transaksi kas ikut dibuat."
+          : "Saldo target diperbarui (tanpa transaksi kas — pilih akun untuk menyambungkan).",
+        tone: "success",
       });
       await load();
     } catch (err) {
@@ -179,12 +201,50 @@ export default function SavingsPage() {
     await load();
   }
 
-  async function cancelGoal(id: string) {
-    await api(`/api/savings/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: "CANCELLED" }),
+  function openEdit(g: Goal) {
+    setEditingId(g.id);
+    setEditForm({
+      name: g.name,
+      targetAmount: String(g.targetAmount),
+      currentAmount: String(g.currentAmount),
+      deadline: g.deadline ? g.deadline.slice(0, 10) : "",
+      category: g.category,
+      color: g.color,
+      note: g.note || "",
+      status: g.status,
     });
-    await load();
+    setError("");
+    setEditOpen(true);
+  }
+
+  async function updateGoal(e: FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/savings/${editingId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: editForm.name,
+          targetAmount: parseIDR(editForm.targetAmount),
+          currentAmount: parseIDR(editForm.currentAmount),
+          deadline: editForm.deadline || null,
+          category: editForm.category,
+          color: editForm.color,
+          note: editForm.note || undefined,
+          status: editForm.status,
+        }),
+      });
+      toast({ title: "Tersimpan", message: "Target tabungan diperbarui.", tone: "success" });
+      setEditOpen(false);
+      setEditingId(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal update target");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const activeCount = goals.filter((g) => g.status === "ACTIVE").length;
@@ -334,14 +394,12 @@ export default function SavingsPage() {
                 </div>
               )}
 
-              <div className="mt-2 flex justify-end gap-1">
-                {g.status === "ACTIVE" && (
-                  <Button variant="ghost" onClick={() => cancelGoal(g.id)}>
-                    Batalkan
-                  </Button>
-                )}
+              <div className="mt-2 flex flex-wrap justify-end gap-1">
+                <Button variant="ghost" onClick={() => openEdit(g)}>
+                  <Pencil size={14} /> Edit
+                </Button>
                 <Button variant="ghost" onClick={() => removeGoal(g.id)}>
-                  Hapus
+                  <Trash2 size={14} /> Hapus
                 </Button>
               </div>
             </Card>
@@ -370,14 +428,12 @@ export default function SavingsPage() {
             <option value="EDUCATION">Pendidikan</option>
             <option value="OTHER">Lainnya</option>
           </Select>
-          <Input
-            label="Target jumlah (Rp)"
-            type="number"
+          <MoneyInput
+            label="Target jumlah"
             required
-            min={1}
             icon={<Hash size={16} />}
             value={form.targetAmount}
-            onChange={(e) => setForm({ ...form, targetAmount: e.target.value })}
+            onValueChange={(raw) => setForm({ ...form, targetAmount: raw })}
           />
           <Input
             label="Deadline (opsional)"
@@ -407,6 +463,85 @@ export default function SavingsPage() {
       </Modal>
 
       <Modal
+        open={editOpen}
+        onClose={() => {
+          setEditOpen(false);
+          setEditingId(null);
+        }}
+        title="Edit target tabungan"
+      >
+        <form onSubmit={updateGoal} className="stagger space-y-3.5">
+          <Input
+            label="Nama target"
+            required
+            icon={<Target size={16} />}
+            value={editForm.name}
+            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+          />
+          <Select
+            label="Jenis tujuan"
+            value={editForm.category}
+            onChange={(e) => setEditForm({ ...editForm, category: e.target.value as Goal["category"] })}
+          >
+            <option value="PURCHASE">Beli Barang</option>
+            <option value="TRAVEL">Traveling</option>
+            <option value="EMERGENCY">Dana Darurat</option>
+            <option value="EDUCATION">Pendidikan</option>
+            <option value="OTHER">Lainnya</option>
+          </Select>
+          <Select
+            label="Status"
+            value={editForm.status}
+            onChange={(e) => setEditForm({ ...editForm, status: e.target.value as Goal["status"] })}
+            hint="Tandai tercapai, dibatalkan, atau aktifkan lagi."
+          >
+            <option value="ACTIVE">Berjalan</option>
+            <option value="COMPLETED">Tercapai</option>
+            <option value="CANCELLED">Dibatalkan</option>
+          </Select>
+          <MoneyInput
+            label="Target jumlah"
+            required
+            icon={<Hash size={16} />}
+            value={editForm.targetAmount}
+            onValueChange={(raw) => setEditForm({ ...editForm, targetAmount: raw })}
+          />
+          <MoneyInput
+            label="Terkumpul saat ini"
+            required
+            icon={<Hash size={16} />}
+            value={editForm.currentAmount}
+            onValueChange={(raw) => setEditForm({ ...editForm, currentAmount: raw })}
+            hint="Bisa disesuaikan manual tanpa setor/tarik."
+          />
+          <Input
+            label="Deadline (opsional)"
+            type="date"
+            icon={<CalendarDays size={16} />}
+            value={editForm.deadline}
+            onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value })}
+          />
+          <Input
+            label="Warna progress"
+            type="color"
+            value={editForm.color}
+            onChange={(e) => setEditForm({ ...editForm, color: e.target.value })}
+          />
+          <TextArea
+            label="Catatan"
+            rows={2}
+            icon={<NotebookPen size={16} />}
+            value={editForm.note}
+            onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
+          />
+          {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+          <Button type="submit" disabled={busy} className="w-full py-3">
+            {busy ? "Menyimpan..." : "Simpan perubahan"}
+          </Button>
+        </form>
+      </Modal>
+
+      <Modal
         open={contribOpen}
         onClose={() => {
           setContribOpen(false);
@@ -423,14 +558,12 @@ export default function SavingsPage() {
             <option value="DEPOSIT">Setor (tambah tabungan)</option>
             <option value="WITHDRAW">Tarik (kurangi tabungan)</option>
           </Select>
-          <Input
+          <MoneyInput
             label="Jumlah"
-            type="number"
             required
-            min={1}
             icon={<Hash size={16} />}
             value={contrib.amount}
-            onChange={(e) => setContrib({ ...contrib, amount: e.target.value })}
+            onValueChange={(raw) => setContrib({ ...contrib, amount: raw })}
           />
           <Select
             label="Dari / ke akun (opsional)"

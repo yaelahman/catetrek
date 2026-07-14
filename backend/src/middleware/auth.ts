@@ -31,6 +31,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const payload = verifyToken(token);
     const user = await prisma.user.findUnique({ where: { id: payload.userId } });
     if (!user) return fail(res, "Unauthorized", 401);
+    if (user.deletedAt) return fail(res, "Akun telah dihapus", 403);
     if (!user.isActive) return fail(res, "Akun dinonaktifkan", 403);
 
     req.user = {
@@ -86,8 +87,9 @@ export async function requireSuperAdmin(req: Request, res: Response, next: NextF
     if (!req.user) return fail(res, "Unauthorized", 401);
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { isSuperAdmin: true, isActive: true },
+      select: { isSuperAdmin: true, isActive: true, deletedAt: true },
     });
+    if (user?.deletedAt) return fail(res, "Akun telah dihapus", 403);
     if (!user?.isActive) return fail(res, "Akun dinonaktifkan", 403);
     if (!user?.isSuperAdmin) return fail(res, "Hanya superadmin yang boleh akses", 403);
     next();

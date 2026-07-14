@@ -19,8 +19,12 @@ import {
   Moon,
   Sun,
   Shield,
+  ChevronDown,
+  BarChart3,
+  UserRound,
+  GitCompareArrows,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useSocket } from "@/lib/socket";
 import { useTheme } from "@/lib/theme";
@@ -35,9 +39,18 @@ const baseNav = [
   { href: "/categories", label: "Kategori", icon: Tags },
   { href: "/budgets", label: "Anggaran", icon: PieChart },
   { href: "/debts", label: "Hutang & Piutang", icon: Handshake },
-  { href: "/reports", label: "Laporan", icon: FileBarChart2 },
-  { href: "/team", label: "Tim", icon: Users },
+  // { href: "/team", label: "Tim", icon: Users },
   { href: "/settings", label: "Pengaturan", icon: Settings },
+];
+
+const reportChildren = [
+  { href: "/reports", label: "Ringkasan", icon: FileBarChart2, exact: true },
+  { href: "/reports/comparison", label: "Perbandingan", icon: GitCompareArrows },
+];
+
+const adminChildren = [
+  { href: "/admin/users", label: "Users", icon: UserRound },
+  { href: "/admin/analytics", label: "Analytics pengguna", icon: BarChart3 },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -47,13 +60,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { connected, realtimeEnabled } = useSocket();
   const { theme, toggleTheme } = useTheme();
   const [open, setOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [reportsOpen, setReportsOpen] = useState(false);
 
-  const nav = useMemo(() => {
-    if (user?.isSuperAdmin) {
-      return [...baseNav, { href: "/admin", label: "Super Admin", icon: Shield }];
-    }
-    return baseNav;
-  }, [user?.isSuperAdmin]);
+  const isAdminRoute = pathname.startsWith("/admin");
+  const isReportsRoute = pathname.startsWith("/reports");
+
+  useEffect(() => {
+    if (isAdminRoute) setAdminOpen(true);
+  }, [isAdminRoute]);
+
+  useEffect(() => {
+    if (isReportsRoute) setReportsOpen(true);
+  }, [isReportsRoute]);
+
+  const nav = useMemo(() => baseNav, []);
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[272px_1fr]">
@@ -77,38 +98,161 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
 
-          <nav className="relative flex-1 space-y-1">
+          <nav className="relative flex-1 space-y-1 overflow-y-auto pr-1">
             {nav.map((item, idx) => {
               const Icon = item.icon;
+              // Insert Laporan dropdown before Settings
+              const showReportsBefore = item.href === "/settings";
               const active = pathname.startsWith(item.href);
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  style={{ animationDelay: `${idx * 0.03}s` }}
-                  className={cn(
-                    "animate-fade-up group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition duration-200",
-                    active
-                      ? "bg-white/15 text-white shadow-inner"
-                      : "text-white/70 hover:bg-white/10 hover:text-white hover:translate-x-0.5"
+                <div key={item.href}>
+                  {showReportsBefore && (
+                    <div className="mb-1">
+                      <button
+                        type="button"
+                        onClick={() => setReportsOpen((v) => !v)}
+                        style={{ animationDelay: `${idx * 0.03}s` }}
+                        className={cn(
+                          "animate-fade-up group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition duration-200",
+                          isReportsRoute
+                            ? "bg-white/15 text-white shadow-inner"
+                            : "text-white/70 hover:bg-white/10 hover:text-white"
+                        )}
+                        aria-expanded={reportsOpen}
+                      >
+                        {isReportsRoute && (
+                          <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[var(--accent)]" />
+                        )}
+                        <span
+                          className={cn(
+                            "grid h-8 w-8 place-items-center rounded-lg transition",
+                            isReportsRoute ? "bg-white/15" : "bg-white/5 group-hover:bg-white/10"
+                          )}
+                        >
+                          <FileBarChart2 size={16} />
+                        </span>
+                        <span className="flex-1 text-left">Laporan</span>
+                        <ChevronDown
+                          size={16}
+                          className={cn("opacity-70 transition-transform", reportsOpen && "rotate-180")}
+                        />
+                      </button>
+
+                      {reportsOpen && (
+                        <div className="mt-1 space-y-0.5 border-l border-white/15 ml-6 pl-2">
+                          {reportChildren.map((child) => {
+                            const ChildIcon = child.icon;
+                            const childActive =
+                              "exact" in child && child.exact
+                                ? pathname === child.href
+                                : pathname.startsWith(child.href);
+                            return (
+                              <Link
+                                key={child.href}
+                                href={child.href}
+                                onClick={() => setOpen(false)}
+                                className={cn(
+                                  "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition",
+                                  childActive
+                                    ? "bg-white/15 text-white"
+                                    : "text-white/65 hover:bg-white/10 hover:text-white"
+                                )}
+                              >
+                                <ChildIcon size={15} />
+                                {child.label}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   )}
+
+                  <Link
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    style={{ animationDelay: `${idx * 0.03}s` }}
+                    className={cn(
+                      "animate-fade-up group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition duration-200",
+                      active
+                        ? "bg-white/15 text-white shadow-inner"
+                        : "text-white/70 hover:bg-white/10 hover:text-white hover:translate-x-0.5"
+                    )}
+                  >
+                    {active && (
+                      <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[var(--accent)]" />
+                    )}
+                    <span
+                      className={cn(
+                        "grid h-8 w-8 place-items-center rounded-lg transition",
+                        active ? "bg-white/15" : "bg-white/5 group-hover:bg-white/10"
+                      )}
+                    >
+                      <Icon size={16} />
+                    </span>
+                    {item.label}
+                  </Link>
+                </div>
+              );
+            })}
+
+            {user?.isSuperAdmin && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setAdminOpen((v) => !v)}
+                  className={cn(
+                    "group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition duration-200",
+                    isAdminRoute
+                      ? "bg-white/15 text-white shadow-inner"
+                      : "text-white/70 hover:bg-white/10 hover:text-white"
+                  )}
+                  aria-expanded={adminOpen}
                 >
-                  {active && (
+                  {isAdminRoute && (
                     <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[var(--accent)]" />
                   )}
                   <span
                     className={cn(
                       "grid h-8 w-8 place-items-center rounded-lg transition",
-                      active ? "bg-white/15" : "bg-white/5 group-hover:bg-white/10"
+                      isAdminRoute ? "bg-white/15" : "bg-white/5 group-hover:bg-white/10"
                     )}
                   >
-                    <Icon size={16} />
+                    <Shield size={16} />
                   </span>
-                  {item.label}
-                </Link>
-              );
-            })}
+                  <span className="flex-1 text-left">Super Admin</span>
+                  <ChevronDown
+                    size={16}
+                    className={cn("opacity-70 transition-transform", adminOpen && "rotate-180")}
+                  />
+                </button>
+
+                {adminOpen && (
+                  <div className="mt-1 space-y-0.5 border-l border-white/15 ml-6 pl-2">
+                    {adminChildren.map((child) => {
+                      const Icon = child.icon;
+                      const active = pathname.startsWith(child.href);
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={() => setOpen(false)}
+                          className={cn(
+                            "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition",
+                            active
+                              ? "bg-white/15 text-white"
+                              : "text-white/65 hover:bg-white/10 hover:text-white"
+                          )}
+                        >
+                          <Icon size={15} />
+                          {child.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </nav>
 
           <div className="relative mt-4 space-y-3 border-t border-white/10 pt-4">

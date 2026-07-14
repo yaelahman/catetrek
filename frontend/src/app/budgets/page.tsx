@@ -1,15 +1,14 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, Plus } from "lucide-react";
+import { CalendarDays, Copy, Hash, Plus, Tags, Trash2 } from "lucide-react";
 import { Protected } from "@/components/Protected";
-import { Button, Card, EmptyState, Input, Modal, PageHeader, Select } from "@/components/ui";
+import { Button, Card, EmptyState, Input, Modal, MoneyInput, PageHeader, Select } from "@/components/ui";
 import { api } from "@/lib/api";
 import { confirm, toast } from "@/lib/alert";
-import { formatIDR } from "@/lib/format";
+import { formatIDR, parseIDR } from "@/lib/format";
 import { MONTH_NAMES } from "@/lib/months";
 import { useRealtimeRefresh } from "@/lib/socket";
-import { CalendarDays, Hash, Tags } from "lucide-react";
 
 type Category = { id: string; name: string; type: string; children?: Category[] };
 type Budget = {
@@ -75,7 +74,7 @@ export default function BudgetsPage() {
         method: "POST",
         body: JSON.stringify({
           categoryId: form.categoryId,
-          amount: Number(form.amount),
+          amount: parseIDR(form.amount),
           month,
           year,
         }),
@@ -215,7 +214,7 @@ export default function BudgetsPage() {
                   </p>
                 </div>
                 <Button variant="ghost" onClick={() => remove(b.id)}>
-                  Hapus
+                  <Trash2 size={14} /> Hapus
                 </Button>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
@@ -248,14 +247,12 @@ export default function BudgetsPage() {
               </option>
             ))}
           </Select>
-          <Input
+          <MoneyInput
             label="Jumlah budget"
-            type="number"
             required
-            min={1}
             icon={<Hash size={16} />}
             value={form.amount}
-            onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            onValueChange={(raw) => setForm({ ...form, amount: raw })}
           />
           {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
           <Button type="submit" className="w-full py-3">

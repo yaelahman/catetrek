@@ -1,14 +1,24 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import {
+  CalendarDays,
+  Filter,
+  Hash,
+  NotebookPen,
+  Pencil,
+  Plus,
+  Repeat,
+  Trash2,
+  UserRound,
+  Wallet,
+} from "lucide-react";
 import { Protected } from "@/components/Protected";
-import { Badge, Button, EmptyState, Input, Modal, PageHeader, Select, TextArea } from "@/components/ui";
+import { Badge, Button, EmptyState, Input, Modal, MoneyInput, PageHeader, Select, TableShell, TextArea } from "@/components/ui";
 import { api } from "@/lib/api";
 import { confirm, toast } from "@/lib/alert";
-import { formatDate, formatIDR } from "@/lib/format";
+import { formatDate, formatIDR, parseIDR } from "@/lib/format";
 import { useRealtimeRefresh, useSocket } from "@/lib/socket";
-import { CalendarDays, Filter, Hash, NotebookPen, Repeat, UserRound, Wallet } from "lucide-react";
 
 type Account = { id: string; name: string; isActive: boolean };
 
@@ -72,7 +82,7 @@ export default function DebtsPage() {
 
   const periods = Math.max(1, Number(form.installmentCount) || 1);
   const previewPerPeriod = useMemo(() => {
-    const total = Number(form.amount) || 0;
+    const total = parseIDR(form.amount);
     if (!total || periods <= 1) return 0;
     return Math.floor((total / periods) * 100) / 100;
   }, [form.amount, periods]);
@@ -103,8 +113,8 @@ export default function DebtsPage() {
         body: JSON.stringify({
           type: form.type,
           partyName: form.partyName,
-          amount: Number(form.amount),
-          paidAmount: Number(form.paidAmount || 0),
+          amount: parseIDR(form.amount),
+          paidAmount: parseIDR(form.paidAmount),
           dueDate: form.dueDate || null,
           startDate: form.dueDate || null,
           installmentCount: count,
@@ -186,7 +196,7 @@ export default function DebtsPage() {
         method: "PATCH",
         body: JSON.stringify({
           partyName: editForm.partyName,
-          amount: Number(editForm.amount),
+          amount: parseIDR(editForm.amount),
           note: editForm.note,
           dueDate: editForm.dueDate || null,
           startDate: editForm.dueDate || null,
@@ -263,8 +273,7 @@ export default function DebtsPage() {
       {items.length === 0 ? (
         <EmptyState title="Belum ada data" desc="Catat hutang usaha atau piutang pelanggan di sini." />
       ) : (
-        <div className="animate-fade-up overflow-hidden rounded-[1.35rem] border border-[var(--line)] bg-white shadow-[var(--shadow-soft)] dark:bg-[var(--bg-elevated)]">
-          <div className="overflow-x-auto">
+        <TableShell minWidth="52rem">
             <table className="w-full text-left text-sm">
               <thead className="bg-[var(--brand-soft)] text-[var(--muted)]">
                 <tr>
@@ -297,8 +306,10 @@ export default function DebtsPage() {
                         <p className="text-xs text-[var(--muted)]">Selesai {formatDate(d.endDate)}</p>
                       )}
                     </td>
-                    <td className="px-4 py-3.5">{d.type === "PAYABLE" ? "Hutang" : "Piutang"}</td>
-                    <td className="px-4 py-3.5">
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      {d.type === "PAYABLE" ? "Hutang" : "Piutang"}
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
                       {d.isInstallment ? (
                         <div>
                           <p className="font-semibold">
@@ -315,12 +326,12 @@ export default function DebtsPage() {
                     <td className="px-4 py-3.5">
                       <Badge tone={tone(d.status)}>{statusLabel(d.status)}</Badge>
                     </td>
-                    <td className="px-4 py-3.5 text-right font-semibold">
+                    <td className="px-4 py-3.5 text-right font-semibold whitespace-nowrap">
                       {formatIDR(d.amount - d.paidAmount)}
                     </td>
                     <td className="px-4 py-3.5 text-right whitespace-nowrap">
                       <Button variant="ghost" onClick={() => openEdit(d)}>
-                        Edit
+                        <Pencil size={14} /> Edit
                       </Button>
                       {d.status !== "PAID" && d.isInstallment && (
                         <Button
@@ -341,15 +352,14 @@ export default function DebtsPage() {
                         </Button>
                       )}
                       <Button variant="ghost" onClick={() => remove(d.id)}>
-                        Hapus
+                        <Trash2 size={14} /> Hapus
                       </Button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-        </div>
+        </TableShell>
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="Tambah hutang/piutang">
@@ -370,14 +380,12 @@ export default function DebtsPage() {
             value={form.partyName}
             onChange={(e) => setForm({ ...form, partyName: e.target.value })}
           />
-          <Input
+          <MoneyInput
             label="Jumlah total"
-            type="number"
             required
-            min={1}
             icon={<Hash size={16} />}
             value={form.amount}
-            onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            onValueChange={(raw) => setForm({ ...form, amount: raw })}
           />
           <Input
             label="Jumlah periode cicilan"
@@ -420,13 +428,11 @@ export default function DebtsPage() {
               />
             </>
           )}
-          <Input
-            label="Sudah dibayar / diterima (Rp)"
-            type="number"
-            min={0}
+          <MoneyInput
+            label="Sudah dibayar / diterima"
             icon={<Hash size={16} />}
             value={form.paidAmount}
-            onChange={(e) => setForm({ ...form, paidAmount: e.target.value })}
+            onValueChange={(raw) => setForm({ ...form, paidAmount: raw })}
             hint={
               periods > 1
                 ? "Boleh dikosongkan/0 — otomatis dihitung dari jumlah cicilan yang sudah dibayar"
@@ -464,14 +470,12 @@ export default function DebtsPage() {
             value={editForm.partyName}
             onChange={(e) => setEditForm({ ...editForm, partyName: e.target.value })}
           />
-          <Input
+          <MoneyInput
             label="Jumlah total"
-            type="number"
             required
-            min={1}
             icon={<Hash size={16} />}
             value={editForm.amount}
-            onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+            onValueChange={(raw) => setEditForm({ ...editForm, amount: raw })}
           />
           <Input
             label="Jumlah periode cicilan"

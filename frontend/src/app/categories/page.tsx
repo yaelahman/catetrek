@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useState } from "react";
-import { Plus, Palette, Tags } from "lucide-react";
+import { Pencil, Plus, Palette, Power, Tags } from "lucide-react";
 import { Protected } from "@/components/Protected";
 import { Badge, Button, EmptyState, Input, Modal, PageHeader, Select } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -119,10 +119,10 @@ export default function CategoriesPage() {
               </div>
               <div className="flex items-center gap-1">
                 <Button variant="ghost" onClick={() => openEdit(c)}>
-                  Edit
+                  <Pencil size={14} /> Edit
                 </Button>
                 <Button variant="ghost" onClick={() => deactivate(c.id)}>
-                  {c.isActive ? "Nonaktifkan" : "Nonaktif"}
+                  <Power size={14} /> {c.isActive ? "Nonaktifkan" : "Nonaktif"}
                 </Button>
               </div>
             </div>

@@ -122,6 +122,7 @@ router.post("/login", loginLimiter, async (req, res) => {
     });
 
     if (!user) return fail(res, "Email atau password salah", 401);
+    if (user.deletedAt) return fail(res, "Akun telah dihapus. Hubungi admin untuk memulihkan.", 403);
     if (!user.isActive) return fail(res, "Akun dinonaktifkan. Hubungi admin.", 403);
 
     const valid = await bcrypt.compare(body.password, user.passwordHash);

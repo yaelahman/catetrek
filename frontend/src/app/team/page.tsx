@@ -1,14 +1,13 @@
 "use client";
 
 import { FormEvent, useCallback, useState } from "react";
-import { Plus } from "lucide-react";
+import { Lock, Mail, Plus, Shield, Trash2, UserRound } from "lucide-react";
 import { Protected } from "@/components/Protected";
-import { Badge, Button, EmptyState, Input, Modal, PageHeader, Select } from "@/components/ui";
+import { Badge, Button, EmptyState, Input, Modal, PageHeader, Select, TableShell } from "@/components/ui";
 import { api } from "@/lib/api";
 import { confirm, toast } from "@/lib/alert";
 import { useAuth } from "@/lib/auth";
 import { useRealtimeRefresh } from "@/lib/socket";
-import { Lock, Mail, Shield, UserRound } from "lucide-react";
 
 type Member = {
   id: string;
@@ -87,7 +86,7 @@ export default function TeamPage() {
       {items.length === 0 ? (
         <EmptyState title="Belum ada anggota" desc="Undang tim untuk kolaborasi pencatatan." />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white">
+        <TableShell minWidth="36rem" className="!rounded-2xl">
           <table className="w-full text-left text-sm">
             <thead className="bg-[var(--brand-soft)]/60 text-[var(--muted)]">
               <tr>
@@ -100,15 +99,15 @@ export default function TeamPage() {
             <tbody>
               {items.map((m) => (
                 <tr key={m.id} className="border-t border-[var(--line)]">
-                  <td className="px-4 py-3 font-medium">{m.user.name}</td>
-                  <td className="px-4 py-3">{m.user.email}</td>
+                  <td className="px-4 py-3 font-medium whitespace-nowrap">{m.user.name}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{m.user.email}</td>
                   <td className="px-4 py-3">
                     <Badge tone="brand">{m.role}</Badge>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
                     {canManage && m.role !== "OWNER" && (
                       <Button variant="ghost" onClick={() => remove(m.id)}>
-                        Hapus
+                        <Trash2 size={14} /> Hapus
                       </Button>
                     )}
                   </td>
@@ -116,7 +115,7 @@ export default function TeamPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableShell>
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="Undang anggota">

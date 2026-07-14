@@ -3,7 +3,15 @@ import PDFDocument from "pdfkit";
 import { prisma } from "../utils/prisma";
 import { ok, fail } from "../utils/response";
 import { requireAuth, requireBusiness } from "../middleware/auth";
-import { startOfMonth, endOfMonth, startOfYear, endOfYear, format } from "date-fns";
+import {
+  startOfMonth,
+  endOfMonth,
+  startOfYear,
+  endOfYear,
+  format,
+  subMonths,
+  addMonths,
+} from "date-fns";
 
 const router = Router();
 router.use(requireAuth, requireBusiness);
@@ -14,6 +22,16 @@ function idr(n: number) {
     currency: "IDR",
     maximumFractionDigits: 0,
   }).format(n || 0);
+}
+
+function amt(v: unknown) {
+  return Number(v || 0);
+}
+
+/** Persen perubahan vs periode sebelumnya. null = tidak bisa dihitung (pembanding 0). */
+function pctChange(current: number, previous: number): number | null {
+  if (previous === 0) return current === 0 ? 0 : null;
+  return Math.round(((current - previous) / Math.abs(previous)) * 1000) / 10;
 }
 
 router.get("/summary", async (req, res) => {
@@ -88,6 +106,149 @@ router.get("/summary", async (req, res) => {
       amount: Number(a._sum.amount || 0),
     })),
   });
+});
+
+/**
+ * Ringkasan perbandingan 12 bulan terakhir vs 12 bulan sebelumnya.
+ * Termasuk MoM % naik/turun per bulan.
+ */
+router.get("/comparison", async (req, res) => {
+  try {
+    const businessId = req.businessId!;
+    const now = new Date();
+    const currentEnd = endOfMonth(now);
+    const currentStart = startOfMonth(subMonths(now, 11));
+    const previousEnd = endOfMonth(subMonths(now, 12));
+    const previousStart = startOfMonth(subMonths(now, 23));
+
+    // Ambil juga 1 bulan sebelum window current agar MoM bulan pertama bisa dihitung
+    const fetchStart = startOfMonth(subMonths(now, 12));
+
+    const txs = await prisma.transaction.findMany({
+      where: {
+        businessId,
+        deletedAt: null,
+        type: { in: ["INCOME", "EXPENSE"] },
+        date: { gte: fetchStart, lte: currentEnd },
+      },
+      select: { type: true, amount: true, date: true },
+    });
+
+    const bucket = new Map<string, { income: number; expense: number }>();
+    for (let i = 0; i <= 12; i++) {
+      const d = addMonths(fetchStart, i);
+      const key = format(d, "yyyy-MM");
+      bucket.set(key, { income: 0, expense: 0 });
+    }
+
+    for (const t of txs) {
+      const key = format(t.date, "yyyy-MM");
+      const row = bucket.get(key);
+      if (!row) continue;
+      const n = amt(t.amount);
+      if (t.type === "INCOME") row.income += n;
+      else row.expense += n;
+    }
+
+    const monthKeys: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      monthKeys.push(format(addMonths(currentStart, i), "yyyy-MM"));
+    }
+
+    const months = monthKeys.map((key, idx) => {
+      const curr = bucket.get(key) || { income: 0, expense: 0 };
+      const prevKey =
+        idx === 0
+          ? format(subMonths(currentStart, 1), "yyyy-MM")
+          : monthKeys[idx - 1];
+      const prev = bucket.get(prevKey) || { income: 0, expense: 0 };
+      const net = curr.income - curr.expense;
+      const prevNet = prev.income - prev.expense;
+      const [y, m] = key.split("-").map(Number);
+      return {
+        key,
+        year: y,
+        month: m,
+        label: format(new Date(y, m - 1, 1), "MMM yyyy"),
+        income: curr.income,
+        expense: curr.expense,
+        net,
+        change: {
+          incomePct: pctChange(curr.income, prev.income),
+          expensePct: pctChange(curr.expense, prev.expense),
+          netPct: pctChange(net, prevNet),
+        },
+      };
+    });
+
+    const sumRange = (keys: string[]) =>
+      keys.reduce(
+        (acc, key) => {
+          const row = bucket.get(key) || { income: 0, expense: 0 };
+          acc.income += row.income;
+          acc.expense += row.expense;
+          return acc;
+        },
+        { income: 0, expense: 0 }
+      );
+
+    // Previous 12 months need a second query window for months outside fetchStart
+    const prevTxs = await prisma.transaction.findMany({
+      where: {
+        businessId,
+        deletedAt: null,
+        type: { in: ["INCOME", "EXPENSE"] },
+        date: { gte: previousStart, lte: previousEnd },
+      },
+      select: { type: true, amount: true },
+    });
+
+    const previous = prevTxs.reduce(
+      (acc, t) => {
+        const n = amt(t.amount);
+        if (t.type === "INCOME") acc.income += n;
+        else acc.expense += n;
+        return acc;
+      },
+      { income: 0, expense: 0 }
+    );
+
+    const current = sumRange(monthKeys);
+    const currentNet = current.income - current.expense;
+    const previousNet = previous.income - previous.expense;
+
+    return ok(res, {
+      range: {
+        current: {
+          start: format(currentStart, "yyyy-MM-dd"),
+          end: format(currentEnd, "yyyy-MM-dd"),
+        },
+        previous: {
+          start: format(previousStart, "yyyy-MM-dd"),
+          end: format(previousEnd, "yyyy-MM-dd"),
+        },
+      },
+      current: {
+        income: current.income,
+        expense: current.expense,
+        net: currentNet,
+      },
+      previous: {
+        income: previous.income,
+        expense: previous.expense,
+        net: previousNet,
+      },
+      change: {
+        incomePct: pctChange(current.income, previous.income),
+        expensePct: pctChange(current.expense, previous.expense),
+        netPct: pctChange(currentNet, previousNet),
+      },
+      months,
+    });
+  } catch (err) {
+    console.error(err);
+    return fail(res, "Gagal memuat perbandingan", 500);
+  }
 });
 
 router.get("/export.csv", async (req, res) => {
