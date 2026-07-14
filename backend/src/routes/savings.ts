@@ -10,7 +10,12 @@ import { money } from "../utils/money";
 const router = Router();
 router.use(requireAuth, requireBusiness);
 
-async function ensureSavingsCategory(businessId: string, type: "INCOME" | "EXPENSE", name: string) {
+async function ensureSavingsCategory(
+  businessId: string,
+  userId: string,
+  type: "INCOME" | "EXPENSE",
+  name: string
+) {
   const existing = await prisma.category.findFirst({
     where: { businessId, name, type, isActive: true },
   });
@@ -18,6 +23,7 @@ async function ensureSavingsCategory(businessId: string, type: "INCOME" | "EXPEN
   return prisma.category.create({
     data: {
       businessId,
+      userId,
       name,
       type,
       color: type === "EXPENSE" ? "#0F766E" : "#059669",
@@ -216,7 +222,12 @@ router.post("/:id/contribute", requireRoles("OWNER", "ADMIN", "STAFF"), async (r
     // Tersambung transaksi kas: setor = EXPENSE dari akun, tarik = INCOME ke akun
     if (body.linkTransaction && body.accountId) {
       if (body.type === "DEPOSIT") {
-        const category = await ensureSavingsCategory(req.businessId!, "EXPENSE", "Tabungan Target");
+        const category = await ensureSavingsCategory(
+          req.businessId!,
+          req.user!.id,
+          "EXPENSE",
+          "Tabungan Target"
+        );
         const tx = await prisma.transaction.create({
           data: {
             type: "EXPENSE",
@@ -235,7 +246,12 @@ router.post("/:id/contribute", requireRoles("OWNER", "ADMIN", "STAFF"), async (r
           transaction: { ...tx, amount: money(tx.amount) },
         });
       } else {
-        const category = await ensureSavingsCategory(req.businessId!, "INCOME", "Tarik Tabungan");
+        const category = await ensureSavingsCategory(
+          req.businessId!,
+          req.user!.id,
+          "INCOME",
+          "Tarik Tabungan"
+        );
         const tx = await prisma.transaction.create({
           data: {
             type: "INCOME",

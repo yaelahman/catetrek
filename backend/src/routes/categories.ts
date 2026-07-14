@@ -40,6 +40,7 @@ router.post("/", requireRoles("OWNER", "ADMIN", "STAFF"), async (req, res) => {
         icon: body.icon,
         parentId: body.parentId || null,
         businessId: req.businessId!,
+        userId: req.user!.id,
       },
     });
 
@@ -63,7 +64,7 @@ router.patch("/:id", requireRoles("OWNER", "ADMIN"), async (req, res) => {
     const body = schema.parse(req.body);
 
     const existing = await prisma.category.findFirst({
-      where: { id: req.params.id, businessId: req.businessId },
+      where: { id: String(req.params.id), businessId: req.businessId },
     });
     if (!existing) return fail(res, "Kategori tidak ditemukan", 404);
 
@@ -82,7 +83,7 @@ router.patch("/:id", requireRoles("OWNER", "ADMIN"), async (req, res) => {
 
 router.delete("/:id", requireRoles("OWNER", "ADMIN"), async (req, res) => {
   const existing = await prisma.category.findFirst({
-    where: { id: req.params.id, businessId: req.businessId },
+    where: { id: String(req.params.id), businessId: req.businessId },
   });
   if (!existing) return fail(res, "Kategori tidak ditemukan", 404);
 

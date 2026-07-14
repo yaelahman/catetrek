@@ -98,7 +98,7 @@ router.patch("/:id", requireRoles("OWNER", "ADMIN"), async (req, res) => {
     const body = schema.parse(req.body);
 
     const existing = await prisma.account.findFirst({
-      where: { id: req.params.id, businessId: req.businessId },
+      where: { id: String(req.params.id), businessId: req.businessId },
     });
     if (!existing) return fail(res, "Akun tidak ditemukan", 404);
 
@@ -124,7 +124,7 @@ router.patch("/:id", requireRoles("OWNER", "ADMIN"), async (req, res) => {
 
 router.delete("/:id", requireRoles("OWNER", "ADMIN"), async (req, res) => {
   const existing = await prisma.account.findFirst({
-    where: { id: req.params.id, businessId: req.businessId },
+    where: { id: String(req.params.id), businessId: req.businessId },
   });
   if (!existing) return fail(res, "Akun tidak ditemukan", 404);
 

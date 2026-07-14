@@ -110,7 +110,7 @@ async function main() {
   for (const c of categoriesSeed) {
     createdCategories.push(
       await prisma.category.create({
-        data: { ...c, businessId: business.id },
+        data: { ...c, businessId: business.id, userId: user.id },
       })
     );
   }

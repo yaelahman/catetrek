@@ -68,7 +68,12 @@ function enrichDebt(debt: {
   };
 }
 
-async function ensureDebtCategory(businessId: string, type: "INCOME" | "EXPENSE", name: string) {
+async function ensureDebtCategory(
+  businessId: string,
+  userId: string,
+  type: "INCOME" | "EXPENSE",
+  name: string
+) {
   const existing = await prisma.category.findFirst({
     where: { businessId, name, type, isActive: true },
   });
@@ -76,6 +81,7 @@ async function ensureDebtCategory(businessId: string, type: "INCOME" | "EXPENSE"
   return prisma.category.create({
     data: {
       businessId,
+      userId,
       name,
       type,
       color: type === "EXPENSE" ? "#C2410C" : "#047857",
@@ -224,6 +230,7 @@ router.post("/:id/pay-installment", requireRoles("OWNER", "ADMIN", "STAFF"), asy
     const isPayable = existing.type === "PAYABLE";
     const cat = await ensureDebtCategory(
       req.businessId!,
+      req.user!.id,
       isPayable ? "EXPENSE" : "INCOME",
       isPayable ? "Pembayaran Hutang" : "Penerimaan Piutang"
     );

@@ -346,8 +346,8 @@ router.get("/export.pdf", async (req, res) => {
       }),
     ]);
 
-    const income = incomeAgg._sum.amount || 0;
-    const expense = expenseAgg._sum.amount || 0;
+    const income = Number(incomeAgg._sum.amount || 0);
+    const expense = Number(expenseAgg._sum.amount || 0);
     const net = income - expense;
 
     const doc = new PDFDocument({ margin: 48, size: "A4" });
@@ -410,7 +410,7 @@ router.get("/export.pdf", async (req, res) => {
       doc.text(t.type, colX[1], y, { width: 60 });
       doc.text(categoryOrAccount, colX[2], y, { width: 115 });
       doc.text(t.note || "-", colX[3], y, { width: 110 });
-      doc.text(idr(t.amount), colX[4], y, { width: 120, align: "right" });
+      doc.text(idr(Number(t.amount)), colX[4], y, { width: 120, align: "right" });
       doc.moveDown(0.85);
     }
 

@@ -168,7 +168,7 @@ router.post("/copy-previous", requireRoles("OWNER", "ADMIN"), async (req, res) =
 
 router.delete("/:id", requireRoles("OWNER", "ADMIN"), async (req, res) => {
   const existing = await prisma.budget.findFirst({
-    where: { id: req.params.id, businessId: req.businessId },
+    where: { id: String(req.params.id), businessId: req.businessId },
   });
   if (!existing) return fail(res, "Budget tidak ditemukan", 404);
 

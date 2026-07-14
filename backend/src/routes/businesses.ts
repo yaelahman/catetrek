@@ -144,7 +144,7 @@ router.patch("/:id/members/:memberId", requireAuth, requireBusiness, requireRole
     const body = schema.parse(req.body);
 
     const membership = await prisma.membership.findFirst({
-      where: { id: req.params.memberId, businessId: req.businessId },
+      where: { id: String(req.params.memberId), businessId: req.businessId },
     });
     if (!membership) return fail(res, "Anggota tidak ditemukan", 404);
 
@@ -166,7 +166,7 @@ router.patch("/:id/members/:memberId", requireAuth, requireBusiness, requireRole
 
 router.delete("/:id/members/:memberId", requireAuth, requireBusiness, requireRoles("OWNER", "ADMIN"), async (req, res) => {
   const membership = await prisma.membership.findFirst({
-    where: { id: req.params.memberId, businessId: req.businessId },
+    where: { id: String(req.params.memberId), businessId: req.businessId },
   });
   if (!membership) return fail(res, "Anggota tidak ditemukan", 404);
   if (membership.role === "OWNER") return fail(res, "Owner tidak bisa dihapus", 400);

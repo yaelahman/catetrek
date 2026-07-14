@@ -77,6 +77,7 @@ router.post("/register", async (req, res) => {
         data: defaultCategories.map((c) => ({
           ...c,
           businessId: business.id,
+          userId: user.id,
         })),
       });
 
