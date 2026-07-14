@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  STAFF
+}
+
+enum AccountType {
+  CASH
+  BANK
+  EWALLET
+  CREDIT
+  OTHER
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum DebtType {
+  PAYABLE
+  RECEIVABLE
+}
+
+enum DebtStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum SavingsCategory {
+  PURCHASE
+  TRAVEL
+  EMERGENCY
+  EDUCATION
+  OTHER
+}
+
+enum SavingsStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  avatarUrl    String?
+  isSuperAdmin Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships   Membership[]
+  transactions  Transaction[] @relation("CreatedBy")
+  activityLogs  ActivityLog[]
+  resetTokens   PasswordResetToken[]
+}
+
+model Business {
+  id           String   @id @default(cuid())
+  name         String
+  currency     String   @default("IDR")
+  timezone     String   @default("Asia/Jakarta")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships  Membership[]
+  accounts     Account[]
+  categories   Category[]
+  transactions Transaction[]
+  budgets      Budget[]
+  debts        Debt[]
+  savingsGoals SavingsGoal[]
+  activityLogs ActivityLog[]
+}
+
+model Membership {
+  id         String   @id @default(cuid())
+  role       Role     @default(STAFF)
+  userId     String
+  businessId String
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId])
+}
+
+model Account {
+  id             String      @id @default(cuid())
+  name           String
+  type           AccountType @default(CASH)
+  color          String      @default("#0F766E")
+  openingBalance Decimal     @default(0) @db.Decimal(18, 2)
+  isActive       Boolean     @default(true)
+  businessId     String
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  business      Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+  fromTransfers Transaction[]         @relation("TransferFrom")
+  toTransfers   Transaction[]         @relation("TransferTo")
+  contributions SavingsContribution[]
+}
+
+model Category {
+  id         String       @id @default(cuid())
+  name       String
+  type       CategoryType
+  color      String       @default("#64748B")
+  icon       String       @default("tag")
+  parentId   String?
+  isActive   Boolean      @default(true)
+  businessId String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  parent       Category?     @relation("CategoryTree", fields: [parentId], references: [id])
+  children     Category[]    @relation("CategoryTree")
+  transactions Transaction[]
+  budgets      Budget[]
+}
+
+model Transaction {
+  id             String          @id @default(cuid())
+  type           TransactionType
+  amount         Decimal         @db.Decimal(18, 2)
+  date           DateTime
+  note           String?
+  attachmentUrl  String?
+  businessId     String
+  accountId      String?
+  categoryId     String?
+  transferFromId String?
+  transferToId   String?
+  createdById    String?
+  deletedAt      DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  account      Account?  @relation(fields: [accountId], references: [id])
+  category     Category? @relation(fields: [categoryId], references: [id])
+  transferFrom Account?  @relation("TransferFrom", fields: [transferFromId], references: [id])
+  transferTo   Account?  @relation("TransferTo", fields: [transferToId], references: [id])
+  createdBy    User?     @relation("CreatedBy", fields: [createdById], references: [id])
+
+  @@index([businessId, deletedAt])
+}
+
+model Budget {
+  id         String   @id @default(cuid())
+  amount     Decimal  @db.Decimal(18, 2)
+  month      Int
+  year       Int
+  businessId String
+  categoryId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, categoryId, month, year])
+}
+
+model Debt {
+  id               String     @id @default(cuid())
+  type             DebtType
+  partyName        String
+  amount           Decimal    @db.Decimal(18, 2)
+  paidAmount       Decimal    @default(0) @db.Decimal(18, 2)
+  status           DebtStatus @default(UNPAID)
+  dueDate          DateTime?
+  /// Jumlah periode cicilan (1 = sekaligus / tanpa cicilan)
+  installmentCount Int        @default(1)
+  /// Berapa kali cicilan sudah dibayar
+  installmentPaid  Int        @default(0)
+  /// Tanggal cicilan pertama (periode berikutnya = +1 bulan, dst.)
+  startDate        DateTime?
+  note             String?
+  businessId       String
+  deletedAt        DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, deletedAt])
+}
+
+model SavingsGoal {
+  id            String          @id @default(cuid())
+  name          String
+  targetAmount  Decimal         @db.Decimal(18, 2)
+  currentAmount Decimal         @default(0) @db.Decimal(18, 2)
+  deadline      DateTime?
+  color         String          @default("#0F766E")
+  category      SavingsCategory @default(OTHER)
+  note          String?
+  status        SavingsStatus   @default(ACTIVE)
+  businessId    String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  business      Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  contributions SavingsContribution[]
+}
+
+model SavingsContribution {
+  id            String   @id @default(cuid())
+  amount        Decimal  @db.Decimal(18, 2)
+  date          DateTime
+  note          String?
+  goalId        String
+  accountId     String?
+  transactionId String?
+  businessId    String
+  createdAt     DateTime @default(now())
+
+  goal    SavingsGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  account Account?    @relation(fields: [accountId], references: [id], onDelete: SetNull)
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  action     String
+  detail     String?
+  userId     String?
+  businessId String?
+  createdAt  DateTime @default(now())
+
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  business Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
