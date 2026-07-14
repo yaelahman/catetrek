@@ -30,7 +30,7 @@ import {
 } from "@/components/ui";
 import { API_URL, api } from "@/lib/api";
 import { confirm, toast } from "@/lib/alert";
-import { formatDate, formatIDR, parseIDR } from "@/lib/format";
+import { formatDate, formatIDR } from "@/lib/format";
 import { useRealtimeRefresh, useSocket } from "@/lib/socket";
 import { usePathname } from "next/navigation";
 

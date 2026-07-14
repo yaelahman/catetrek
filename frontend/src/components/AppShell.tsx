@@ -11,7 +11,6 @@ import {
   PiggyBank,
   FileBarChart2,
   Handshake,
-  Users,
   Settings,
   LogOut,
   Menu,

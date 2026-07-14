@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
 /** Progress bar tipis di atas saat pindah halaman. */
@@ -12,14 +12,14 @@ export function NavigationProgress() {
   const doneRef = useRef<number | null>(null);
   const prevPath = useRef(pathname);
 
-  function clearTimers() {
+  const clearTimers = useCallback(() => {
     if (timerRef.current) window.clearInterval(timerRef.current);
     if (doneRef.current) window.clearTimeout(doneRef.current);
     timerRef.current = null;
     doneRef.current = null;
-  }
+  }, []);
 
-  function start() {
+  const start = useCallback(() => {
     clearTimers();
     setVisible(true);
     setWidth(14);
@@ -30,16 +30,16 @@ export function NavigationProgress() {
         return Math.min(88, w + step);
       });
     }, 160);
-  }
+  }, [clearTimers]);
 
-  function finish() {
+  const finish = useCallback(() => {
     clearTimers();
     setWidth(100);
     doneRef.current = window.setTimeout(() => {
       setVisible(false);
       setWidth(0);
     }, 220);
-  }
+  }, [clearTimers]);
 
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
@@ -74,14 +74,14 @@ export function NavigationProgress() {
       window.removeEventListener("popstate", onPopState);
       clearTimers();
     };
-  }, []);
+  }, [start, clearTimers]);
 
   useEffect(() => {
     if (prevPath.current !== pathname) {
       prevPath.current = pathname;
       finish();
     }
-  }, [pathname]);
+  }, [pathname, finish]);
 
   if (!visible) return null;
 
