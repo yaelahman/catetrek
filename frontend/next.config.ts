@@ -12,6 +12,20 @@ const withPWA = withPWAInit({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "catetrek.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "api.catetrek.com",
+        pathname: "/**",
+      },
+    ],
+  },
 };
 
 export default withPWA(nextConfig);
