@@ -259,6 +259,53 @@ textarea {
   animation: floatY 5s ease-in-out infinite;
 }
 
+/* Landing page */
+@keyframes landingKenBurns {
+  from {
+    transform: scale(1.08) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1) translate3d(0, -1.5%, 0);
+  }
+}
+
+@keyframes landingRise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landingBrandIn {
+  from {
+    opacity: 0;
+    letter-spacing: 0.08em;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    letter-spacing: -0.03em;
+    transform: translateY(0);
+  }
+}
+
+.landing-kenburns {
+  animation: landingKenBurns 18s ease-out both;
+  will-change: transform;
+}
+
+.landing-brand-in {
+  animation: landingBrandIn 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-rise {
+  animation: landingRise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .animate-blob {
   animation: blob 12s ease-in-out infinite;
 }

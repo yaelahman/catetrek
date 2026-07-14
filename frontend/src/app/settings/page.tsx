@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { BRAND_PRESETS, DEFAULT_BRAND, normalizeHex } from "@/lib/brand-palette";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/format";
+import { PwaInstallCard } from "@/components/PwaInstallCard";
 import { Briefcase, Check, Lock, Mail, Moon, Palette, RotateCcw, Sun, UserRound } from "lucide-react";
 
 export default function SettingsPage() {
@@ -85,6 +86,9 @@ export default function SettingsPage() {
       <PageHeader title="Pengaturan" subtitle="Kelola profil, tampilan, dan keamanan akun." />
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <div className="lg:col-span-2">
+          <PwaInstallCard />
+        </div>
         <Card className="lg:col-span-2">
           <div className="mb-4 flex items-start gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">

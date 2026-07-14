@@ -25,6 +25,7 @@ import { useAuth } from "@/lib/auth";
 import { useSocket } from "@/lib/socket";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/format";
+import { PwaInstallHint } from "@/components/PwaInstallHint";
 
 const baseNav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -111,6 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="relative mt-4 space-y-3 border-t border-white/10 pt-4">
+            <PwaInstallHint variant="sidebar" />
             {user && user.businesses.length > 1 && (
               <select
                 className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-sm outline-none transition focus:border-white/40"
@@ -195,7 +197,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="animate-fade-in px-4 py-6 md:px-8">{children}</main>
+        <main className="animate-fade-in px-4 py-6 md:px-8">
+          <PwaInstallHint variant="auto" />
+          {children}
+        </main>
       </div>
     </div>
   );
