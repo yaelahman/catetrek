@@ -35,6 +35,7 @@ const EVENTS = [
   "transaction:changed",
   "account:changed",
   "category:changed",
+  "product:changed",
   "budget:changed",
   "debt:changed",
   "member:changed",

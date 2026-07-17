@@ -132,6 +132,7 @@ export const Input = forwardRef<
             id={id}
             ref={ref}
             type={inputType}
+            {...props}
             className="field-control"
             value={value}
             defaultValue={defaultValue}
@@ -148,7 +149,6 @@ export const Input = forwardRef<
               const el = e.currentTarget;
               setFilled(el.value.length > 0);
             }}
-            {...props}
           />
         </div>
         {isPassword && (
@@ -509,6 +509,7 @@ export const TextArea = forwardRef<
           <textarea
             id={id}
             ref={ref}
+            {...props}
             className="field-control"
             value={value}
             defaultValue={defaultValue}
@@ -517,7 +518,6 @@ export const TextArea = forwardRef<
               setFilled(e.target.value.length > 0);
               onChange?.(e);
             }}
-            {...props}
           />
         </div>
       </div>
@@ -542,24 +542,38 @@ export function Modal({
   title: string;
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
+
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
-      <button
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
+      <div
         className="absolute inset-0 animate-fade-in backdrop-blur-[6px]"
         style={{ background: "var(--overlay)" }}
-        onClick={onClose}
-        aria-label="Tutup"
+        aria-hidden="true"
       />
-      <div className="relative z-10 w-full max-w-lg animate-scale-in overflow-hidden rounded-[1.5rem] border border-[var(--line)] bg-[var(--bg-elevated)] shadow-[var(--shadow)]">
-        <div className="h-1.5 w-full bg-gradient-to-r from-[var(--brand)] via-[var(--brand-mid)] to-[var(--accent)]" />
-        <div className="p-5 sm:p-6">
-          <div className="mb-5 flex items-start justify-between gap-3">
+      <div className="relative z-10 flex max-h-[calc(100dvh-1rem)] w-full max-w-lg animate-scale-in flex-col overflow-hidden rounded-[1.5rem] border border-[var(--line)] bg-[var(--bg-elevated)] shadow-[var(--shadow)] sm:max-h-[calc(100dvh-2rem)]">
+        <div className="h-1.5 w-full shrink-0 bg-gradient-to-r from-[var(--brand)] via-[var(--brand-mid)] to-[var(--accent)]" />
+        <div className="flex min-h-0 flex-1 flex-col p-4 sm:p-6">
+          <div className="mb-4 flex shrink-0 items-start justify-between gap-3 sm:mb-5">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--brand)]">Form</p>
-              <h2 className="mt-1 text-xl font-bold">{title}</h2>
+              <h2 id="modal-title" className="mt-1 text-xl font-bold">{title}</h2>
             </div>
             <button
+              type="button"
               onClick={onClose}
               className="rounded-xl border border-[var(--line)] p-2 text-[var(--muted)] transition hover:bg-[var(--brand-soft)] hover:text-[var(--brand)]"
               aria-label="Tutup modal"
@@ -567,7 +581,9 @@ export function Modal({
               <X size={16} />
             </button>
           </div>
-          {children}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+            {children}
+          </div>
         </div>
       </div>
     </div>

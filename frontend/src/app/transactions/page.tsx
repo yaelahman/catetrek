@@ -6,6 +6,7 @@ import {
   Filter,
   Hash,
   NotebookPen,
+  Package,
   Paperclip,
   Pencil,
   Plus,
@@ -36,6 +37,15 @@ import { usePathname } from "next/navigation";
 
 type Account = { id: string; name: string; isActive: boolean };
 type Category = { id: string; name: string; type: string; isActive: boolean; children?: Category[] };
+type Product = {
+  id: string;
+  name: string;
+  sku?: string | null;
+  price: number;
+  stock?: number | null;
+  unit: string;
+  isActive: boolean;
+};
 type Tx = {
   id: string;
   type: "INCOME" | "EXPENSE" | "TRANSFER";
@@ -43,12 +53,15 @@ type Tx = {
   date: string;
   note?: string | null;
   attachmentUrl?: string | null;
+  quantity?: number | null;
   account?: Account | null;
   category?: Category | null;
-  transferFrom?: Account | null;
-  transferTo?: Account | null;
+  product?: Product | null;
   accountId?: string | null;
   categoryId?: string | null;
+  productId?: string | null;
+  transferFrom?: Account | null;
+  transferTo?: Account | null;
   transferFromId?: string | null;
   transferToId?: string | null;
 };
@@ -62,6 +75,8 @@ const emptyForm = {
   note: "",
   accountId: "",
   categoryId: "",
+  productId: "",
+  quantity: "1",
   transferFromId: "",
   transferToId: "",
 };
@@ -78,9 +93,19 @@ export default function TransactionsPage() {
   });
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [open, setOpen] = useState(false);
+  const [saleOpen, setSaleOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [saleForm, setSaleForm] = useState({
+    accountId: "",
+    date: new Date().toISOString().slice(0, 10),
+    note: "",
+  });
+  /** Keranjang: productId -> qty */
+  const [saleCart, setSaleCart] = useState<Record<string, number>>({});
+  const [saleProductQ, setSaleProductQ] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -103,13 +128,15 @@ export default function TransactionsPage() {
   }, [debouncedQ, typeFilter, accountFilter, categoryFilter, startDate, endDate]);
 
   const loadMeta = useCallback(async () => {
-    const [acc, cats] = await Promise.all([
+    const [acc, cats, prods] = await Promise.all([
       api<Account[]>("/api/accounts"),
       api<Category[]>("/api/categories"),
+      api<Product[]>("/api/products"),
     ]);
     setAccounts(acc.filter((a) => a.isActive !== false));
     const flat = cats.flatMap((c) => [c, ...(c.children || [])]);
     setCategories(flat.filter((c) => c.isActive !== false));
+    setProducts(prods.filter((p) => p.isActive !== false));
   }, []);
 
   const load = useCallback(async () => {
@@ -158,6 +185,24 @@ export default function TransactionsPage() {
     setOpen(true);
   }
 
+  function openSale() {
+    setSaleForm({
+      accountId: accounts[0]?.id || "",
+      date: new Date().toISOString().slice(0, 10),
+      note: "",
+    });
+    setSaleCart({});
+    setSaleProductQ("");
+    setError("");
+    setSaleOpen(true);
+  }
+
+  function closeSaleModal() {
+    setSaleOpen(false);
+    setSaleCart({});
+    setError("");
+  }
+
   function openEdit(t: Tx) {
     setEditingId(t.id);
     setForm({
@@ -167,6 +212,8 @@ export default function TransactionsPage() {
       note: t.note || "",
       accountId: t.accountId || t.account?.id || "",
       categoryId: t.categoryId || t.category?.id || "",
+      productId: t.productId || t.product?.id || "",
+      quantity: t.quantity != null ? String(t.quantity) : "1",
       transferFromId: t.transferFromId || t.transferFrom?.id || "",
       transferToId: t.transferToId || t.transferTo?.id || "",
     });
@@ -182,6 +229,54 @@ export default function TransactionsPage() {
     setError("");
   }
 
+  function toggleSaleProduct(productId: string) {
+    setSaleCart((prev) => {
+      if (prev[productId]) {
+        const next = { ...prev };
+        delete next[productId];
+        return next;
+      }
+      return { ...prev, [productId]: 1 };
+    });
+  }
+
+  function setSaleQty(productId: string, raw: string) {
+    const qty = Math.max(1, Math.floor(Number(raw) || 1));
+    setSaleCart((prev) => {
+      if (!prev[productId]) return prev;
+      return { ...prev, [productId]: qty };
+    });
+  }
+
+  function incomeCategoryId() {
+    return (
+      categories.find((c) => c.type === "INCOME" && /penjualan produk/i.test(c.name))?.id ||
+      categories.find((c) => c.type === "INCOME" && /penjualan/i.test(c.name))?.id ||
+      categories.find((c) => c.type === "INCOME")?.id ||
+      ""
+    );
+  }
+
+  const saleCartItems = Object.entries(saleCart)
+    .map(([productId, quantity]) => {
+      const product = products.find((p) => p.id === productId);
+      if (!product) return null;
+      return {
+        product,
+        quantity,
+        subtotal: Math.round(product.price * quantity * 100) / 100,
+      };
+    })
+    .filter(Boolean) as Array<{ product: Product; quantity: number; subtotal: number }>;
+
+  const saleTotal = saleCartItems.reduce((s, i) => s + i.subtotal, 0);
+
+  const filteredSaleProducts = products.filter((p) => {
+    const q = saleProductQ.trim().toLowerCase();
+    if (!q) return true;
+    return p.name.toLowerCase().includes(q) || (p.sku || "").toLowerCase().includes(q);
+  });
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -189,6 +284,10 @@ export default function TransactionsPage() {
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => {
+        if (k === "productId" || k === "quantity") {
+          if (form.type === "INCOME" && form.productId) fd.append(k, v || (k === "quantity" ? "1" : ""));
+          return;
+        }
         if (v) fd.append(k, v);
       });
       if (attachment) fd.append("attachment", attachment);
@@ -202,8 +301,62 @@ export default function TransactionsPage() {
       setForm(emptyForm);
       bump();
       await load();
+      await loadMeta();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal simpan");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSaleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (saleCartItems.length === 0) {
+      setError("Pilih minimal 1 produk");
+      return;
+    }
+    if (!saleForm.accountId) {
+      setError("Pilih akun penerima");
+      return;
+    }
+
+    for (const item of saleCartItems) {
+      if (item.product.stock != null && item.product.stock < item.quantity) {
+        setError(
+          `Stok "${item.product.name}" tidak cukup. Tersedia: ${item.product.stock} ${item.product.unit}`
+        );
+        return;
+      }
+    }
+
+    setBusy(true);
+    setError("");
+    try {
+      const categoryId = incomeCategoryId();
+      const result = await api<{ count: number; total: number }>("/api/transactions/sale", {
+        method: "POST",
+        body: JSON.stringify({
+          accountId: saleForm.accountId,
+          date: saleForm.date,
+          note: saleForm.note.trim() || undefined,
+          categoryId: categoryId || undefined,
+          items: saleCartItems.map((i) => ({
+            productId: i.product.id,
+            quantity: i.quantity,
+          })),
+        }),
+      });
+      toast({
+        title: "Penjualan tersimpan",
+        message: `${result.count} produk · ${formatIDR(result.total)}`,
+        tone: "success",
+      });
+      closeSaleModal();
+      bump();
+      await load();
+      await loadMeta();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal simpan penjualan");
     } finally {
       setBusy(false);
     }
@@ -223,6 +376,7 @@ export default function TransactionsPage() {
     toast({ title: "Diarsipkan", message: "Transaksi berhasil diarsipkan.", tone: "success" });
     bump();
     await load();
+    await loadMeta();
   }
 
   const filteredCategories = categories.filter((c) =>
@@ -235,9 +389,14 @@ export default function TransactionsPage() {
         title="Transaksi"
         subtitle="Catat pemasukan, pengeluaran, dan transfer — sinkron ke semua perangkat."
         action={
-          <Button onClick={openCreate}>
-            <Plus size={16} /> Tambah
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={openSale}>
+              <Package size={16} /> Penjualan Produk
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus size={16} /> Tambah
+            </Button>
+          </div>
         }
       />
 
@@ -340,6 +499,15 @@ export default function TransactionsPage() {
                         >
                           {t.type}
                         </Badge>
+                        {t.product && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--brand)]">
+                            <Package size={12} />
+                            {t.product.name}
+                            {t.quantity != null && Number(t.quantity) > 1
+                              ? ` × ${t.quantity}`
+                              : ""}
+                          </span>
+                        )}
                         {t.attachmentUrl && (
                           <a
                             href={`${API_URL}${t.attachmentUrl}`}
@@ -393,14 +561,24 @@ export default function TransactionsPage() {
             label="Tipe transaksi"
             icon={<Filter size={16} />}
             value={form.type}
-            onChange={(e) => setForm({ ...form, type: e.target.value })}
+            onChange={(e) => {
+              const type = e.target.value;
+              setForm({
+                ...form,
+                type,
+                productId: "",
+                quantity: "1",
+                categoryId: "",
+              });
+            }}
           >
             <option value="INCOME">Pemasukan</option>
             <option value="EXPENSE">Pengeluaran</option>
             <option value="TRANSFER">Transfer</option>
           </Select>
+
           <MoneyInput
-            label="Jumlah"
+            label="Jumlah uang"
             required
             icon={<Hash size={16} />}
             value={form.amount}
@@ -489,13 +667,168 @@ export default function TransactionsPage() {
 
           <FileAttach file={attachment} onChange={setAttachment} />
 
-          {error && (
+          {error && !saleOpen && (
             <p className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-[var(--danger)] dark:border-orange-500/30 dark:bg-orange-500/10">
               {error}
             </p>
           )}
           <Button type="submit" disabled={busy} className="w-full py-3">
             {busy ? "Menyimpan..." : editingId ? "Simpan perubahan" : "Simpan transaksi"}
+          </Button>
+        </form>
+      </Modal>
+
+      <Modal open={saleOpen} onClose={closeSaleModal} title="Penjualan Produk">
+        <form onSubmit={onSaleSubmit} className="space-y-4">
+          <Input
+            label="Cari produk"
+            icon={<Search size={16} />}
+            value={saleProductQ}
+            onChange={(e) => setSaleProductQ(e.target.value)}
+          />
+
+          <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
+            {filteredSaleProducts.length === 0 ? (
+              <p className="rounded-xl border border-[var(--line)] px-3 py-4 text-center text-sm text-[var(--muted)]">
+                {products.length === 0
+                  ? "Belum ada produk. Tambah dulu di menu Produk."
+                  : "Tidak ada produk yang cocok."}
+              </p>
+            ) : (
+              filteredSaleProducts.map((p) => {
+                const active = Boolean(saleCart[p.id]);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => toggleSaleProduct(p.id)}
+                    className={`flex w-full items-start gap-3 rounded-xl border px-3 py-3 text-left transition ${
+                      active
+                        ? "border-[var(--brand)] bg-[var(--brand-soft)]"
+                        : "border-[var(--line)] hover:bg-[var(--brand-soft)]/40"
+                    }`}
+                  >
+                    <span
+                      className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border text-[10px] font-bold ${
+                        active
+                          ? "border-[var(--brand)] bg-[var(--brand)] text-white"
+                          : "border-[var(--line)] text-transparent"
+                      }`}
+                    >
+                      ✓
+                    </span>
+                    <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
+                      <Package size={16} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold">{p.name}</p>
+                      <p className="mt-0.5 text-xs text-[var(--muted)]">
+                        SKU: {p.sku || "—"}
+                        {p.stock != null ? ` · Stok ${p.stock} ${p.unit}` : ""}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-semibold text-[var(--success)]">{formatIDR(p.price)}</p>
+                      <p className="text-[10px] text-[var(--muted)]">/{p.unit}</p>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {saleCartItems.length > 0 && (
+            <div className="space-y-2 rounded-xl border border-[var(--line)] bg-[var(--brand-soft)]/20 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                Keranjang ({saleCartItems.length})
+              </p>
+              {saleCartItems.map(({ product, quantity, subtotal }) => (
+                <div
+                  key={product.id}
+                  className="flex flex-wrap items-center gap-2 border-b border-[var(--line)]/60 py-2 last:border-0"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{product.name}</p>
+                    <p className="text-xs text-[var(--muted)]">
+                      {formatIDR(product.price)} / {product.unit}
+                    </p>
+                  </div>
+                  <Input
+                    label="Qty"
+                    type="number"
+                    min={1}
+                    step="1"
+                    className="w-20"
+                    value={String(quantity)}
+                    onChange={(e) => setSaleQty(product.id, e.target.value)}
+                  />
+                  <div className="w-24 text-right">
+                    <p className="text-xs text-[var(--muted)]">Subtotal</p>
+                    <p className="text-sm font-semibold">{formatIDR(subtotal)}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => toggleSaleProduct(product.id)}
+                    aria-label={`Hapus ${product.name}`}
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
+              ))}
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-sm font-semibold">Total</p>
+                <p className="text-lg font-bold text-[var(--success)]">{formatIDR(saleTotal)}</p>
+              </div>
+            </div>
+          )}
+
+          <Select
+            label="Akun penerima"
+            required
+            icon={<Wallet size={16} />}
+            value={saleForm.accountId}
+            onChange={(e) => setSaleForm({ ...saleForm, accountId: e.target.value })}
+          >
+            <option value="">Pilih akun</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </Select>
+
+          <Input
+            label="Tanggal"
+            type="date"
+            required
+            icon={<CalendarDays size={16} />}
+            value={saleForm.date}
+            onChange={(e) => setSaleForm({ ...saleForm, date: e.target.value })}
+          />
+
+          <TextArea
+            label="Catatan (opsional)"
+            rows={2}
+            icon={<NotebookPen size={16} />}
+            value={saleForm.note}
+            onChange={(e) => setSaleForm({ ...saleForm, note: e.target.value })}
+          />
+
+          {error && saleOpen && (
+            <p className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-[var(--danger)] dark:border-orange-500/30 dark:bg-orange-500/10">
+              {error}
+            </p>
+          )}
+
+          <Button
+            type="submit"
+            disabled={busy || saleCartItems.length === 0}
+            className="w-full py-3"
+          >
+            {busy
+              ? "Menyimpan..."
+              : `Simpan penjualan${saleCartItems.length ? ` (${saleCartItems.length} produk)` : ""}`}
           </Button>
         </form>
       </Modal>

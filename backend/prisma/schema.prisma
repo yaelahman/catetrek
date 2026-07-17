@@ -87,6 +87,7 @@ model Business {
   memberships  Membership[]
   accounts     Account[]
   categories   Category[]
+  products     Product[]
   transactions Transaction[]
   budgets      Budget[]
   debts        Debt[]
@@ -148,6 +149,27 @@ model Category {
   @@index([businessId, userId])
 }
 
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  sku         String?
+  price       Decimal  @db.Decimal(18, 2)
+  /// null = stok tidak dilacak
+  stock       Int?
+  unit        String   @default("pcs")
+  note        String?
+  isActive    Boolean  @default(true)
+  businessId  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([businessId, isActive])
+  @@index([businessId, name])
+}
+
 model Transaction {
   id             String          @id @default(cuid())
   type           TransactionType
@@ -158,6 +180,8 @@ model Transaction {
   businessId     String
   accountId      String?
   categoryId     String?
+  productId      String?
+  quantity       Decimal?        @db.Decimal(18, 2)
   transferFromId String?
   transferToId   String?
   createdById    String?
@@ -168,11 +192,13 @@ model Transaction {
   business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   account      Account?  @relation(fields: [accountId], references: [id])
   category     Category? @relation(fields: [categoryId], references: [id])
+  product      Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
   transferFrom Account?  @relation("TransferFrom", fields: [transferFromId], references: [id])
   transferTo   Account?  @relation("TransferTo", fields: [transferToId], references: [id])
   createdBy    User?     @relation("CreatedBy", fields: [createdById], references: [id])
 
   @@index([businessId, deletedAt])
+  @@index([businessId, productId])
 }
 
 model Budget {

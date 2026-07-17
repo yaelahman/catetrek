@@ -14,6 +14,7 @@ import reportRoutes from "./routes/reports";
 import businessRoutes from "./routes/businesses";
 import savingsRoutes from "./routes/savings";
 import adminRoutes from "./routes/admin";
+import productRoutes from "./routes/products";
 
 export function createApp() {
   const app = express();
@@ -38,6 +39,7 @@ export function createApp() {
   app.use("/api/businesses", businessRoutes);
   app.use("/api/accounts", accountRoutes);
   app.use("/api/categories", categoryRoutes);
+  app.use("/api/products", productRoutes);
   app.use("/api/transactions", transactionRoutes);
   app.use("/api/budgets", budgetRoutes);
   app.use("/api/debts", debtRoutes);

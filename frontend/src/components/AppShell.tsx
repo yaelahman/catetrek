@@ -11,6 +11,7 @@ import {
   PiggyBank,
   FileBarChart2,
   Handshake,
+  Package,
   Settings,
   LogOut,
   Menu,
@@ -22,6 +23,7 @@ import {
   BarChart3,
   UserRound,
   GitCompareArrows,
+  BookOpen,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
@@ -33,12 +35,14 @@ import { PwaInstallHint } from "@/components/PwaInstallHint";
 const baseNav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/transactions", label: "Transaksi", icon: ArrowLeftRight },
+  { href: "/products", label: "Produk", icon: Package },
   { href: "/accounts", label: "Akun Dompet", icon: Wallet },
   { href: "/savings", label: "Tabungan Target", icon: PiggyBank },
   { href: "/categories", label: "Kategori", icon: Tags },
   { href: "/budgets", label: "Anggaran", icon: PieChart },
   { href: "/debts", label: "Hutang & Piutang", icon: Handshake },
   // { href: "/team", label: "Tim", icon: Users },
+  { href: "/guide", label: "Panduan", icon: BookOpen },
   { href: "/settings", label: "Pengaturan", icon: Settings },
 ];
 

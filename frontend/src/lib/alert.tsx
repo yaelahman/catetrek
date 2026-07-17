@@ -153,11 +153,16 @@ export function AlertProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!confirmState) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeConfirm(false);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+    };
   }, [confirmState, closeConfirm]);
 
   const tone = confirmState?.tone || "warning";
@@ -175,22 +180,20 @@ export function AlertProvider({ children }: { children: ReactNode }) {
                 className="fixed inset-0 z-[80] flex items-center justify-center p-4"
                 style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}
               >
-                <button
-                  type="button"
-                  aria-label="Tutup"
+                <div
+                  aria-hidden="true"
                   className={cn(
                     "absolute inset-0 transition-opacity duration-200",
                     visible ? "opacity-100" : "opacity-0"
                   )}
                   style={{ background: "rgba(16, 24, 22, 0.5)", backdropFilter: "blur(10px)" }}
-                  onClick={() => closeConfirm(false)}
                 />
                 <div
                   role="alertdialog"
                   aria-modal="true"
                   aria-labelledby="catetrek-confirm-title"
                   className={cn(
-                    "relative z-10 rounded-[1.6rem] border border-[var(--line)] bg-white transition-all duration-300 ease-out dark:bg-[var(--bg-elevated)]",
+                    "relative z-10 max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-[1.6rem] border border-[var(--line)] bg-white transition-all duration-300 ease-out dark:bg-[var(--bg-elevated)]",
                     visible
                       ? "translate-y-0 scale-100 opacity-100"
                       : "translate-y-3 scale-[0.96] opacity-0"

@@ -20,8 +20,9 @@ const loginLimiter = rateLimit({
 });
 
 const defaultCategories = [
-  { name: "Penjualan", type: "INCOME" as const, color: "#059669", icon: "store" },
-  { name: "Pendapatan Lain", type: "INCOME" as const, color: "#10B981", icon: "plus" },
+  { name: "Penjualan Produk", type: "INCOME" as const, color: "#059669", icon: "store" },
+  { name: "Penjualan Jasa", type: "INCOME" as const, color: "#10B981", icon: "briefcase" },
+  { name: "Pendapatan Lain", type: "INCOME" as const, color: "#14B8A6", icon: "plus" },
   { name: "Pembelian Stok", type: "EXPENSE" as const, color: "#DC2626", icon: "box" },
   { name: "Operasional", type: "EXPENSE" as const, color: "#EA580C", icon: "settings" },
   { name: "Gaji Karyawan", type: "EXPENSE" as const, color: "#D97706", icon: "users" },
